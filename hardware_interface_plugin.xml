@@ -1,0 +1,10 @@
+<library path="agilex_piper_ros2_control_hardware_interface">
+  <class name="agilex_piper_ros2_control/AgilexPiperHardwareInterface"
+         type="agilex_piper_ros2_control::AgilexPiperHardwareInterface"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Hardware interface for the Agilex Piper 6-DOF robotic arm using ROS 2 control framework.
+      Provides position control for all joints and simulated force/torque sensing.
+    </description>
+  </class>
+</library>

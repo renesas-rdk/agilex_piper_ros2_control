@@ -1,0 +1,90 @@
+// ********************************************************************************************************************
+// Copyright [2025] Renesas Electronics Corporation and/or its licensors. All Rights Reserved.
+//
+// The contents of this file (the "contents") are proprietary and confidential to Renesas Electronics Corporation
+// and/or its licensors ("Renesas") and subject to statutory and contractual protections.
+//
+// Unless otherwise expressly agreed in writing between Renesas and you: 1) you may not use, copy, modify, distribute,
+// display, or perform the contents; 2) you may not use any name or mark of Renesas for advertising or publicity
+// purposes or in connection with your use of the contents; 3) RENESAS MAKES NO WARRANTY OR REPRESENTATIONS ABOUT THE
+// SUITABILITY OF THE CONTENTS FOR ANY PURPOSE; THE CONTENTS ARE PROVIDED "AS IS" WITHOUT ANY EXPRESS OR IMPLIED
+// WARRANTY, INCLUDING THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+// NON-INFRINGEMENT; AND 4) RENESAS SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, SPECIAL, OR CONSEQUENTIAL DAMAGES,
+// INCLUDING DAMAGES RESULTING FROM LOSS OF USE, DATA, OR PROJECTS, WHETHER IN AN ACTION OF CONTRACT OR TORT, ARISING
+// OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THE CONTENTS. Third-party contents included in this file may
+// be subject to different terms.
+// ********************************************************************************************************************
+#pragma once
+
+#include <cmath>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "agilex_piper_controller/piper_controller.hpp"
+#include "agilex_piper_ros2_control/visibility_control.hpp"
+#include "hardware_interface/handle.hpp"
+#include "hardware_interface/hardware_info.hpp"
+#include "hardware_interface/system_interface.hpp"
+#include "hardware_interface/types/hardware_interface_return_values.hpp"
+#include "rclcpp/macros.hpp"
+#include "rclcpp/rclcpp.hpp"
+#include "rclcpp_lifecycle/state.hpp"
+
+namespace agilex_piper_ros2_control
+{
+
+class AgilexPiperHardwareInterface : public hardware_interface::SystemInterface
+{
+public:
+  RCLCPP_SHARED_PTR_DEFINITIONS(AgilexPiperHardwareInterface)
+
+  AGILEX_PIPER_ROS2_CONTROL_PUBLIC
+  CallbackReturn on_init(const hardware_interface::HardwareInfo & info) override;
+
+  AGILEX_PIPER_ROS2_CONTROL_PUBLIC
+  std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
+
+  AGILEX_PIPER_ROS2_CONTROL_PUBLIC
+  std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
+
+  AGILEX_PIPER_ROS2_CONTROL_PUBLIC
+  CallbackReturn on_activate(const rclcpp_lifecycle::State & previous_state) override;
+
+  AGILEX_PIPER_ROS2_CONTROL_PUBLIC
+  CallbackReturn on_deactivate(const rclcpp_lifecycle::State & previous_state) override;
+
+  AGILEX_PIPER_ROS2_CONTROL_PUBLIC
+  hardware_interface::return_type read(
+    const rclcpp::Time & time, const rclcpp::Duration & period) override;
+
+  AGILEX_PIPER_ROS2_CONTROL_PUBLIC
+  hardware_interface::return_type write(
+    const rclcpp::Time & time, const rclcpp::Duration & period) override;
+
+private:
+  // Convert between hardware-specific units (0.001 deg) and ROS standard units (rad)
+  double hw_units_to_rad(int hw_units) const;
+  int rad_to_hw_units(double rad) const;
+
+  // Joint state and command storage
+  std::vector<double> hw_joint_positions_;
+  std::vector<double> hw_joint_velocities_;
+  std::vector<double> hw_joint_position_commands_;
+
+  // Hardware communication
+  std::unique_ptr<agilex::piper::PiperController> piper_controller_;
+
+  // Configuration parameters
+  std::string can_interface_;
+
+  // Runtime state
+  bool hardware_connected_;
+  bool first_read_completed_;
+
+  // Constants
+  static constexpr double HW_TO_RAD_FACTOR = M_PI / 180000.0;  // Convert 0.001deg to rad
+  static constexpr size_t NUM_JOINTS = 6;
+};
+
+}  // namespace agilex_piper_ros2_control
