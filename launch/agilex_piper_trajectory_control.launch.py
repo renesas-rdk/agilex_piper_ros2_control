@@ -170,7 +170,7 @@ def generate_launch_description() -> LaunchDescription:
     # Declare arguments
     can_interface_arg = DeclareLaunchArgument(
         'can_interface',
-        default_value='can0',
+        default_value='can2',
         description='CAN interface for hardware communication'
     )
 
