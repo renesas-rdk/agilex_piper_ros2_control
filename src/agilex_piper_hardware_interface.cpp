@@ -35,21 +35,12 @@ hardware_interface::CallbackReturn AgilexPiperHardwareInterface::on_init(
   }
 
   // Validate the number of joints
-  if (info_.joints.size() != NUM_JOINTS) {
+  if (info_.joints.size() < NUM_JOINTS) {
     RCLCPP_ERROR(
       rclcpp::get_logger("AgilexPiperHardwareInterface"), "Expected %zu joints, got %zu",
       NUM_JOINTS, info_.joints.size());
     return CallbackReturn::ERROR;
   }
-
-  // Initialize joint data structures
-  hw_joint_positions_.resize(NUM_JOINTS, 0.0);
-  hw_joint_velocities_.resize(NUM_JOINTS, 0.0);
-  hw_joint_position_commands_.resize(NUM_JOINTS, 0.0);
-
-  // Initialize state
-  hardware_connected_ = false;
-  first_read_completed_ = false;
 
   // Parse hardware parameters
   can_interface_ = info_.hardware_parameters.at("can_interface");
@@ -60,9 +51,34 @@ hardware_interface::CallbackReturn AgilexPiperHardwareInterface::on_init(
     return CallbackReturn::ERROR;
   }
 
+  // Parse include_gripper parameter
+  include_gripper_ = true;
+  auto it = info_.hardware_parameters.find("include_gripper");
+  if (it != info_.hardware_parameters.end()) {
+    include_gripper_ = (it->second == "true" || it->second == "True" || it->second == "1");
+  }
+
+  // Initialize joint data structures
+  hw_joint_positions_.resize(NUM_JOINTS, 0.0);
+  hw_joint_velocities_.resize(NUM_JOINTS, 0.0);
+  hw_joint_position_commands_.resize(NUM_JOINTS, 0.0);
+
+  // Initialize gripper joint data structures
+  if (include_gripper_) {
+    hw_gripper_positions_.resize(NUM_GRIPPER_JOINTS, 0.0);
+    hw_gripper_velocities_.resize(NUM_GRIPPER_JOINTS, 0.0);
+    hw_gripper_position_commands_.resize(NUM_GRIPPER_JOINTS, 0.0);
+    hw_gripper_effort_commands_.resize(NUM_GRIPPER_JOINTS, 0.0);
+  }
+
+  // Initialize state
+  hardware_connected_ = false;
+  first_read_completed_ = false;
+
   RCLCPP_INFO(
-    rclcpp::get_logger("AgilexPiperHardwareInterface"), "Initialized with CAN interface: %s",
-    can_interface_.c_str());
+    rclcpp::get_logger("AgilexPiperHardwareInterface"),
+    "Initialized with CAN interface: %s, include_gripper: %s", can_interface_.c_str(),
+    include_gripper_ ? "true" : "false");
 
   return CallbackReturn::SUCCESS;
 }
@@ -84,6 +100,23 @@ AgilexPiperHardwareInterface::export_state_interfaces()
         info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &hw_joint_velocities_[i]));
   }
 
+  // Export gripper joint state interfaces (joint7 and joint8)
+  if (include_gripper_) {
+    // Look for joints beyond the arm joints (assuming they are gripper joints)
+    for (size_t i = NUM_JOINTS; i < info_.joints.size() && i < NUM_JOINTS + NUM_GRIPPER_JOINTS;
+         ++i) {
+      size_t gripper_idx = i - NUM_JOINTS;
+      state_interfaces.emplace_back(
+        hardware_interface::StateInterface(
+          info_.joints[i].name, hardware_interface::HW_IF_POSITION,
+          &hw_gripper_positions_[gripper_idx]));
+      state_interfaces.emplace_back(
+        hardware_interface::StateInterface(
+          info_.joints[i].name, hardware_interface::HW_IF_VELOCITY,
+          &hw_gripper_velocities_[gripper_idx]));
+    }
+  }
+
   return state_interfaces;
 }
 
@@ -97,6 +130,22 @@ AgilexPiperHardwareInterface::export_command_interfaces()
     command_interfaces.emplace_back(
       hardware_interface::CommandInterface(
         info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_joint_position_commands_[i]));
+  }
+
+  // Export gripper joint command interfaces (joint7 and joint8)
+  if (include_gripper_) {
+    for (size_t i = NUM_JOINTS; i < info_.joints.size() && i < NUM_JOINTS + NUM_GRIPPER_JOINTS;
+         ++i) {
+      size_t gripper_idx = i - NUM_JOINTS;
+      command_interfaces.emplace_back(
+        hardware_interface::CommandInterface(
+          info_.joints[i].name, hardware_interface::HW_IF_POSITION,
+          &hw_gripper_position_commands_[gripper_idx]));
+      command_interfaces.emplace_back(
+        hardware_interface::CommandInterface(
+          info_.joints[i].name, hardware_interface::HW_IF_EFFORT,
+          &hw_gripper_effort_commands_[gripper_idx]));
+    }
   }
 
   return command_interfaces;
@@ -129,6 +178,13 @@ hardware_interface::CallbackReturn AgilexPiperHardwareInterface::on_activate(
       return CallbackReturn::ERROR;
     }
 
+    // Enable gripper
+    if (include_gripper_) {
+      if (!piper_controller_->control_gripper(0, DEFAULT_GRIPPER_EFFORT, GRIPPER_ENABLE, 0x00)) {
+        RCLCPP_WARN(rclcpp::get_logger("AgilexPiperHardwareInterface"), "Failed to enable gripper");
+      }
+    }
+
     // Set control mode to position control
     if (!piper_controller_->set_mode(0x01, 0x01, 50)) {
       RCLCPP_ERROR(
@@ -147,6 +203,18 @@ hardware_interface::CallbackReturn AgilexPiperHardwareInterface::on_activate(
     // Initialize commands to current positions
     std::copy(
       hw_joint_positions_.begin(), hw_joint_positions_.end(), hw_joint_position_commands_.begin());
+
+    // Initialize gripper commands to current positions
+    if (include_gripper_) {
+      std::copy(
+        hw_gripper_positions_.begin(), hw_gripper_positions_.end(),
+        hw_gripper_position_commands_.begin());
+
+      // Initialize gripper effort commands to default values
+      std::fill(
+        hw_gripper_effort_commands_.begin(), hw_gripper_effort_commands_.end(),
+        static_cast<double>(DEFAULT_GRIPPER_EFFORT) * HW_TO_NM_FACTOR);
+    }
 
     RCLCPP_INFO(
       rclcpp::get_logger("AgilexPiperHardwareInterface"),
@@ -170,8 +238,11 @@ hardware_interface::CallbackReturn AgilexPiperHardwareInterface::on_deactivate(
 
   try {
     if (hardware_connected_ && piper_controller_) {
-      // Disable arm motors safely
+      // Disable arm motors and gripper safely
       piper_controller_->disable_arm();
+      if (include_gripper_) {
+        piper_controller_->control_gripper(0, DEFAULT_GRIPPER_EFFORT, GRIPPER_DISABLE_CLEAR, 0x00);
+      }
       piper_controller_->disconnect();
       piper_controller_.reset();
     }
@@ -203,6 +274,10 @@ hardware_interface::return_type AgilexPiperHardwareInterface::read(
   try {
     // Store previous positions for velocity calculation
     std::vector<double> prev_positions = hw_joint_positions_;
+    std::vector<double> prev_gripper_positions;
+    if (include_gripper_) {
+      prev_gripper_positions = hw_gripper_positions_;
+    }
 
     // Read joint positions from hardware
     auto arm_joint = piper_controller_->get_arm_joint();
@@ -215,13 +290,30 @@ hardware_interface::return_type AgilexPiperHardwareInterface::read(
     hw_joint_positions_[4] = hw_units_to_rad(arm_joint.j5);
     hw_joint_positions_[5] = hw_units_to_rad(arm_joint.j6);
 
+    // Read gripper state from hardware and update gripper joint positions
+    if (include_gripper_) {
+      auto gripper_state = piper_controller_->get_arm_gripper();
+      double api_gripper_position = hw_gripper_units_to_meters(gripper_state.grippers_angle);
+      update_gripper_positions_from_api(api_gripper_position);
+    }
+
     // Calculate joint velocities (finite difference)
     if (first_read_completed_ && period.seconds() > 0.0) {
       for (size_t i = 0; i < NUM_JOINTS; ++i) {
         hw_joint_velocities_[i] = (hw_joint_positions_[i] - prev_positions[i]) / period.seconds();
       }
+      // Calculate gripper joint velocities
+      if (include_gripper_) {
+        for (size_t i = 0; i < NUM_GRIPPER_JOINTS; ++i) {
+          hw_gripper_velocities_[i] =
+            (hw_gripper_positions_[i] - prev_gripper_positions[i]) / period.seconds();
+        }
+      }
     } else {
       std::fill(hw_joint_velocities_.begin(), hw_joint_velocities_.end(), 0.0);
+      if (include_gripper_) {
+        std::fill(hw_gripper_velocities_.begin(), hw_gripper_velocities_.end(), 0.0);
+      }
     }
 
     // Initialize commands to current positions on first read
@@ -229,6 +321,15 @@ hardware_interface::return_type AgilexPiperHardwareInterface::read(
       std::copy(
         hw_joint_positions_.begin(), hw_joint_positions_.end(),
         hw_joint_position_commands_.begin());
+      if (include_gripper_) {
+        std::copy(
+          hw_gripper_positions_.begin(), hw_gripper_positions_.end(),
+          hw_gripper_position_commands_.begin());
+        // Initialize gripper effort commands to default values
+        std::fill(
+          hw_gripper_effort_commands_.begin(), hw_gripper_effort_commands_.end(),
+          static_cast<double>(DEFAULT_GRIPPER_EFFORT) * HW_TO_NM_FACTOR);
+      }
       first_read_completed_ = true;
     }
 
@@ -265,6 +366,45 @@ hardware_interface::return_type AgilexPiperHardwareInterface::write(
       return hardware_interface::return_type::ERROR;
     }
 
+    // Handle gripper commands
+    if (include_gripper_) {
+      // Coordinate gripper joints: GripperActionController commands joint7 with total opening width
+      // We need to convert total width to individual joint positions
+      if (hw_gripper_position_commands_.size() >= 2) {
+        // joint7 command represents total opening width, convert to individual positions
+        double total_opening = hw_gripper_position_commands_[0];  // Total width from controller
+        double half_opening = total_opening * 0.5;                // Half for each finger
+
+        // Set individual joint positions
+        hw_gripper_position_commands_[0] = half_opening;   // joint7: +half_opening
+        hw_gripper_position_commands_[1] = -half_opening;  // joint8: -half_opening
+
+        // Both joints use the same effort command (from joint7)
+        if (hw_gripper_effort_commands_.size() >= 2) {
+          hw_gripper_effort_commands_[1] = hw_gripper_effort_commands_[0];
+        }
+      }
+
+      // Convert gripper joint commands to API format and send to hardware
+      // Calculate the total gripper opening from the two joint positions
+      // joint7 (left finger): 0 to +0.035m, joint8 (right finger): -0.035m to 0
+      // Total opening = joint7 - joint8 (distance between fingers)
+      double total_opening = hw_gripper_position_commands_[0] - hw_gripper_position_commands_[1];
+      int gripper_position_cmd = meters_to_hw_gripper_units(total_opening);
+
+      // Use the effort command from the controller (joint7) instead of default
+      double effort_nm = hw_gripper_effort_commands_[0];  // Effort in N⋅m from controller
+      uint16_t gripper_effort_cmd = nm_to_hw_gripper_effort_units(
+        effort_nm);  // Send gripper command (enable gripper with position and effort)
+      if (!piper_controller_->control_gripper(
+            gripper_position_cmd, gripper_effort_cmd, GRIPPER_ENABLE, 0x00)) {
+        RCLCPP_ERROR(
+          rclcpp::get_logger("AgilexPiperHardwareInterface"),
+          "Failed to send gripper commands to hardware");
+        return hardware_interface::return_type::ERROR;
+      }
+    }
+
     return hardware_interface::return_type::OK;
 
   } catch (const std::exception & e) {
@@ -282,6 +422,40 @@ double AgilexPiperHardwareInterface::hw_units_to_rad(int hw_units) const
 int AgilexPiperHardwareInterface::rad_to_hw_units(double rad) const
 {
   return static_cast<int>(rad / HW_TO_RAD_FACTOR);
+}
+
+double AgilexPiperHardwareInterface::hw_gripper_units_to_meters(int hw_units) const
+{
+  return static_cast<double>(hw_units) * HW_TO_METER_FACTOR;
+}
+
+int AgilexPiperHardwareInterface::meters_to_hw_gripper_units(double meters) const
+{
+  return static_cast<int>(meters / HW_TO_METER_FACTOR);
+}
+
+double AgilexPiperHardwareInterface::hw_gripper_effort_units_to_nm(uint16_t hw_units) const
+{
+  return static_cast<double>(hw_units) * HW_TO_NM_FACTOR;
+}
+
+uint16_t AgilexPiperHardwareInterface::nm_to_hw_gripper_effort_units(double nm) const
+{
+  return static_cast<uint16_t>(std::clamp(nm / HW_TO_NM_FACTOR, 0.0, 5000.0));
+}
+
+void AgilexPiperHardwareInterface::update_gripper_positions_from_api(double api_position)
+{
+  // The API position represents the total opening distance
+  // For state feedback: joint7 reports total opening, joint8 reports individual position
+  // This matches the command interface where joint7 receives total opening commands
+
+  double half_opening = api_position * 0.5;
+
+  if (hw_gripper_positions_.size() >= 2) {
+    hw_gripper_positions_[0] = api_position;   // joint7: total opening width
+    hw_gripper_positions_[1] = -half_opening;  // joint8: individual finger position
+  }
 }
 
 }  // namespace agilex_piper_ros2_control

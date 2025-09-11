@@ -46,10 +46,29 @@
     </joint>
   </xacro:macro>
 
+  <!-- Gripper interface definitions -->
+  <xacro:macro name="piper_gripper_interfaces">
+    <!-- Both joints need to be controlled for proper visualization -->
+    <joint name="joint7">
+      <command_interface name="position"/>
+      <command_interface name="effort"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="joint8">
+      <command_interface name="position"/>
+      <command_interface name="effort"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </xacro:macro>
+
   <xacro:macro name="agilex_piper_ros2_control" params="
     name:=AgilexPiperSystem
     can_interface:=can0
-    use_mock_hardware:=false">
+    use_mock_hardware:=false
+    include_gripper:=true">
 
     <!-- Real hardware configuration -->
     <xacro:unless value="${use_mock_hardware}">
@@ -57,10 +76,16 @@
         <hardware>
           <plugin>agilex_piper_ros2_control/AgilexPiperHardwareInterface</plugin>
           <param name="can_interface">${can_interface}</param>
+          <param name="include_gripper">${include_gripper}</param>
         </hardware>
 
         <!-- Joint interfaces -->
         <xacro:piper_joint_interfaces/>
+
+        <!-- Gripper interfaces (conditional) -->
+        <xacro:if value="${include_gripper}">
+          <xacro:piper_gripper_interfaces/>
+        </xacro:if>
 
       </ros2_control>
     </xacro:unless>
@@ -75,6 +100,11 @@
 
         <!-- Joint interfaces -->
         <xacro:piper_joint_interfaces/>
+
+        <!-- Gripper interfaces (conditional) -->
+        <xacro:if value="${include_gripper}">
+          <xacro:piper_gripper_interfaces/>
+        </xacro:if>
 
       </ros2_control>
     </xacro:if>

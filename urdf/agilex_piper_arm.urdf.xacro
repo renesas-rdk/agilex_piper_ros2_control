@@ -23,6 +23,7 @@
   <xacro:agilex_piper_ros2_control
     name="AgilexPiperSystem"
     can_interface="$(arg can_interface)"
-    use_mock_hardware="$(arg use_mock_hardware)"/>
+    use_mock_hardware="$(arg use_mock_hardware)"
+    include_gripper="false"/>
 
 </robot>

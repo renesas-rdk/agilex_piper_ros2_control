@@ -67,16 +67,32 @@ private:
   double hw_units_to_rad(int hw_units) const;
   int rad_to_hw_units(double rad) const;
 
+  // Convert between hardware-specific gripper units and ROS standard units
+  double hw_gripper_units_to_meters(int hw_units) const;
+  int meters_to_hw_gripper_units(double meters) const;
+  double hw_gripper_effort_units_to_nm(uint16_t hw_units) const;
+  uint16_t nm_to_hw_gripper_effort_units(double nm) const;
+
+  // Gripper control helper methods
+  void update_gripper_positions_from_api(double api_position);
+
   // Joint state and command storage
   std::vector<double> hw_joint_positions_;
   std::vector<double> hw_joint_velocities_;
   std::vector<double> hw_joint_position_commands_;
+
+  // Gripper joint state and command storage (joint7 and joint8)
+  std::vector<double> hw_gripper_positions_;
+  std::vector<double> hw_gripper_velocities_;
+  std::vector<double> hw_gripper_position_commands_;
+  std::vector<double> hw_gripper_effort_commands_;
 
   // Hardware communication
   std::unique_ptr<agilex::piper::PiperController> piper_controller_;
 
   // Configuration parameters
   std::string can_interface_;
+  bool include_gripper_;
 
   // Runtime state
   bool hardware_connected_;
@@ -84,7 +100,15 @@ private:
 
   // Constants
   static constexpr double HW_TO_RAD_FACTOR = M_PI / 180000.0;  // Convert 0.001deg to rad
+  static constexpr double HW_TO_METER_FACTOR = 0.000001;       // Convert 0.001mm to meters
+  static constexpr double HW_TO_NM_FACTOR = 0.001;             // Convert 0.001Nm to Nm
   static constexpr size_t NUM_JOINTS = 6;
+  static constexpr size_t NUM_GRIPPER_JOINTS = 2;
+
+  // Gripper control constants
+  static constexpr uint16_t DEFAULT_GRIPPER_EFFORT = 1000;  // in 0.001 N⋅m
+  static constexpr uint8_t GRIPPER_ENABLE = 0x01;
+  static constexpr uint8_t GRIPPER_DISABLE_CLEAR = 0x02;
 };
 
 }  // namespace agilex_piper_ros2_control

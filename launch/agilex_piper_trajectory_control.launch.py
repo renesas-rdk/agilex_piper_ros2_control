@@ -24,12 +24,16 @@ This launch file starts:
 - robot_state_publisher: Publishes TF transforms from URDF
 - joint_state_broadcaster: Publishes joint states from hardware
 - joint_trajectory_controller: Provides joint space trajectory following
+- gripper_controller: (Optional) Provides gripper action interface when include_gripper=true
 - foxglove_bridge: WebSocket bridge for Foxglove Studio visualization
 
 Usage:
-  # For physical robot with CAN interface:
+  # For physical robot with CAN interface (with gripper):
   ros2 launch agilex_piper_ros2_control agilex_piper_trajectory_control.launch.py
   ros2 launch agilex_piper_ros2_control agilex_piper_trajectory_control.launch.py can_interface:=can1
+
+  # For arm-only configuration (without gripper):
+  ros2 launch agilex_piper_ros2_control agilex_piper_trajectory_control.launch.py include_gripper:=false
 
   # For SIMULATION/TESTING without physical robot (RECOMMENDED for testing):
   ros2 launch agilex_piper_ros2_control agilex_piper_trajectory_control.launch.py use_mock_hardware:=true
@@ -50,6 +54,10 @@ Test trajectory in another terminal with:
       ]
     }
   }"
+
+Test gripper commands (when include_gripper=true):
+  # Use standard gripper action interface (position = total opening width):
+  ros2 action send_goal /piper_gripper_controller/gripper_cmd control_msgs/action/GripperCommand "{command: {position: 0.05, max_effort: 10.0}}"
 
 Or run the Python test script:
   python3 ros2_ws/install/agilex_piper_ros2_control/share/agilex_piper_ros2_control/examples/test_joint_trajectory.py
@@ -76,14 +84,20 @@ def launch_setup(context, *args, **kwargs) -> List[Node]:
     # Get launch configurations
     can_interface_value = LaunchConfiguration('can_interface').perform(context)
     use_mock_hardware_value = LaunchConfiguration('use_mock_hardware').perform(context)
+    include_gripper_value = LaunchConfiguration('include_gripper').perform(context)
 
     # Get package directories
     pkg_share = get_package_share_directory('agilex_piper_ros2_control')
 
-    # Robot description
-    robot_description_xacro = os.path.join(
-        pkg_share, 'urdf', 'agilex_piper_system.urdf.xacro'
-    )
+    # Robot description - choose based on gripper configuration
+    if include_gripper_value.lower() == 'true':
+        robot_description_xacro = os.path.join(
+            pkg_share, 'urdf', 'agilex_piper_arm_gripper.urdf.xacro'
+        )
+    else:
+        robot_description_xacro = os.path.join(
+            pkg_share, 'urdf', 'agilex_piper_arm.urdf.xacro'
+        )
 
     # Process XACRO file with parameters
     robot_description_raw = xacro.process_file(
@@ -103,6 +117,10 @@ def launch_setup(context, *args, **kwargs) -> List[Node]:
 
     joint_trajectory_config = os.path.join(
         pkg_share, 'config', 'joint_trajectory_controller.yaml'
+    )
+
+    gripper_config = os.path.join(
+        pkg_share, 'config', 'gripper_controller.yaml'
     )
 
     # Foxglove bridge launch file
@@ -162,6 +180,22 @@ def launch_setup(context, *args, **kwargs) -> List[Node]:
         )
     ]
 
+    # Add gripper controller if requested
+    if include_gripper_value.lower() == 'true':
+        nodes.append(
+            Node(
+                package='controller_manager',
+                executable='spawner',
+                name='gripper_controller_spawner',
+                output='screen',
+                arguments=[
+                    'piper_gripper_controller',
+                    '--controller-manager', '/controller_manager',
+                    '--param-file', gripper_config,
+                ],
+            )
+        )
+
     return nodes
 
 
@@ -180,8 +214,15 @@ def generate_launch_description() -> LaunchDescription:
         description='Use mock hardware for testing (true/false)'
     )
 
+    include_gripper_arg = DeclareLaunchArgument(
+        'include_gripper',
+        default_value='true',
+        description='Include gripper controller and interfaces (true/false)'
+    )
+
     return LaunchDescription([
         can_interface_arg,
         use_mock_hardware_arg,
+        include_gripper_arg,
         OpaqueFunction(function=launch_setup)
     ])
