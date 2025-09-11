@@ -108,8 +108,10 @@ def launch_setup(context, *args, **kwargs) -> List[Node]:
         pkg_share, 'config', 'controller_manager.yaml'
     )
 
+    # Select cartesian motion controller config based on gripper (static YAMLs)
     cartesian_motion_config = os.path.join(
-        pkg_share, 'config', 'cartesian_motion_controller.yaml'
+        pkg_share, 'config',
+        'cartesian_motion_controller_gripper.yaml' if include_gripper_value.lower() == 'true' else 'cartesian_motion_controller.yaml'
     )
 
     gripper_config = os.path.join(
