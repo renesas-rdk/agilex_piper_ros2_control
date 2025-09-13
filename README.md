@@ -65,7 +65,7 @@ Controller names and exact parameters are defined in the YAML files and loaded b
 ## URDF / Xacro
 Xacros are provided in `urdf/`:
 - `agilex_piper_arm.urdf.xacro` and `agilex_piper_arm_gripper.urdf.xacro`: Robot description for arm and gripper.
-- `agilex_piper_ros2_control.xacro`: ros2_control hardware, transmissions, and interfaces.
+- `agilex_piper_macro.ros2_control.xacro`: ros2_control hardware, transmissions, and interfaces.
 
 To include in your own robot:
 ```xml
