@@ -4,6 +4,7 @@
   <!-- Load arguments -->
   <xacro:arg name="can_interface" default="can0"/>
   <xacro:arg name="use_mock_hardware" default="false"/>
+  <xacro:arg name="prefix" default=""/>
 
   <!-- Include the arm description -->
   <xacro:include filename="$(find agilex_piper_arm_description)/urdf/agilex_piper_arm_macro.xacro"/>
@@ -18,20 +19,21 @@
   <link name="world"/>
 
   <!-- Mount the arm to world -->
-  <xacro:agilex_piper_arm prefix="" parent="world">
+  <xacro:agilex_piper_arm prefix="$(arg prefix)" parent="world">
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </xacro:agilex_piper_arm>
 
   <!-- Mount the gripper to the arm's tool0 link -->
-  <xacro:agilex_piper_gripper prefix="" parent="tool0">
+  <xacro:agilex_piper_gripper prefix="$(arg prefix)" parent="$(arg prefix)tool0">
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </xacro:agilex_piper_gripper>
 
   <!-- Add ros2_control -->
   <xacro:agilex_piper_ros2_control
-    name="AgilexPiperSystem"
+    name="agilex_piper_arm"
     can_interface="$(arg can_interface)"
     use_mock_hardware="$(arg use_mock_hardware)"
-    include_gripper="true"/>
+    include_gripper="true"
+    prefix="$(arg prefix)"/>
 
 </robot>
