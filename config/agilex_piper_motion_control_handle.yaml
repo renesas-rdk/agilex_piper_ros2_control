@@ -1,7 +1,7 @@
 # Motion Control Handle Configuration for Agilex Piper Arm
 # This provides interactive markers in RViz for manual Cartesian control
 
-piper_motion_control_handle:
+agilex_piper_motion_control_handle:
   ros__parameters:
     # Robot kinematic configuration
     end_effector_link: "tool0"     # End-effector frame

@@ -41,12 +41,12 @@ Usage:
   Then connect Foxglove Studio to ws://<foxglove_bridge_ip>:8765
 
 Test joint position commands in another terminal with:
-  ros2 topic pub --once /piper_joint_position_controller/commands std_msgs/msg/Float64MultiArray "{data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}"
-  ros2 topic pub --once /piper_joint_position_controller/commands std_msgs/msg/Float64MultiArray "{data: [0.785, 0.0, 0.0, 0.0, 0.0, 0.0]}"
+  ros2 topic pub --once /agilex_piper_joint_position_controller/commands std_msgs/msg/Float64MultiArray "{data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}"
+  ros2 topic pub --once /agilex_piper_joint_position_controller/commands std_msgs/msg/Float64MultiArray "{data: [0.785, 0.0, 0.0, 0.0, 0.0, 0.0]}"
 
 Test gripper commands (when include_gripper=true):
   # Use standard gripper action interface (position = total opening width):
-  ros2 action send_goal /piper_gripper_controller/gripper_cmd control_msgs/action/GripperCommand "{command: {position: 0.05, max_effort: 10.0}}"
+  ros2 action send_goal /agilex_piper_gripper_action_controller/gripper_cmd control_msgs/action/GripperCommand "{command: {position: 0.05, max_effort: 10.0}}"
 
 Or you can publish from foxglove studio's built-in publisher panel.
 
@@ -104,11 +104,11 @@ def launch_setup(context, *args, **kwargs) -> List[Node]:
     )
 
     joint_position_config = os.path.join(
-        pkg_share, 'config', 'joint_position_controller.yaml'
+        pkg_share, 'config', 'agilex_piper_joint_position_controller.yaml'
     )
 
     gripper_config = os.path.join(
-        pkg_share, 'config', 'gripper_controller.yaml'
+        pkg_share, 'config', 'agilex_piper_gripper_action_controller.yaml'
     )
 
     # Foxglove bridge launch file
@@ -157,7 +157,7 @@ def launch_setup(context, *args, **kwargs) -> List[Node]:
             name='joint_position_controller_spawner',
             output='screen',
             arguments=[
-                'piper_joint_position_controller',
+                'agilex_piper_joint_position_controller',
                 '--controller-manager', '/controller_manager',
                 '--param-file', joint_position_config,
             ],
@@ -177,7 +177,7 @@ def launch_setup(context, *args, **kwargs) -> List[Node]:
                 name='gripper_controller_spawner',
                 output='screen',
                 arguments=[
-                    'piper_gripper_controller',
+                    'agilex_piper_gripper_action_controller',
                     '--controller-manager', '/controller_manager',
                     '--param-file', gripper_config,
                 ],

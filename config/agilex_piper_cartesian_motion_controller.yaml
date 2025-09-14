@@ -1,10 +1,10 @@
 # Cartesian Motion Controller Configuration for Agilex Piper Arm
 # This controller provides Cartesian space motion control without force feedback
 
-piper_cartesian_motion_controller:
+agilex_piper_cartesian_motion_controller:
   ros__parameters:
     # Robot kinematic configuration
-    end_effector_link: "tcp"       # End-effector frame
+    end_effector_link: "tool0"     # End-effector frame
     robot_base_link: "base_link"   # Robot base frame
 
     # Controlled joints

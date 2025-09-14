@@ -1,7 +1,7 @@
 # Gripper Controller Configuration for Agilex Piper Gripper
 # This file configures the gripper action controller for the Agilex Piper gripper
 
-piper_gripper_controller:
+agilex_piper_gripper_action_controller:
   ros__parameters:
     # Gripper action controller maps single gripper command to two joints
     joint: joint7  # Main gripper joint (GripperActionController uses single joint)

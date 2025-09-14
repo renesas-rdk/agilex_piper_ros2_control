@@ -40,7 +40,7 @@ class JointTrajectoryTester(Node):
         self._action_client = ActionClient(
             self,
             FollowJointTrajectory,
-            '/piper_joint_trajectory_controller/follow_joint_trajectory'
+            '/agilex_piper_joint_trajectory_controller/follow_joint_trajectory'
         )
 
         self.joint_names = [

@@ -17,54 +17,47 @@
 # *********************************************************************************************************************
 
 """
-Launch file for Agilex Piper arm with joint trajectory control.
+Launch file for Agilex Piper arm with Cartesian motion control.
 
 This launch file starts:
 - ros2_control_node: Main controller manager for hardware interface
 - robot_state_publisher: Publishes TF transforms from URDF
 - joint_state_broadcaster: Publishes joint states from hardware
-- joint_trajectory_controller: Provides joint space trajectory following
+- cartesian_motion_controller: Provides Cartesian space motion control
 - gripper_controller: (Optional) Provides gripper action interface when include_gripper=true
 - foxglove_bridge: WebSocket bridge for Foxglove Studio visualization
 
 Usage:
   # For physical robot with CAN interface (with gripper):
-  ros2 launch agilex_piper_ros2_control agilex_piper_trajectory_control.launch.py
-  ros2 launch agilex_piper_ros2_control agilex_piper_trajectory_control.launch.py can_interface:=can1
+  ros2 launch agilex_piper_ros2_control agilex_piper_cartesian_motion_control.launch.py
+  ros2 launch agilex_piper_ros2_control agilex_piper_cartesian_motion_control.launch.py can_interface:=can1
 
   # For arm-only configuration (without gripper):
-  ros2 launch agilex_piper_ros2_control agilex_piper_trajectory_control.launch.py include_gripper:=false
+  ros2 launch agilex_piper_ros2_control agilex_piper_cartesian_motion_control.launch.py include_gripper:=false
 
   # For SIMULATION/TESTING without physical robot (RECOMMENDED for testing):
-  ros2 launch agilex_piper_ros2_control agilex_piper_trajectory_control.launch.py use_mock_hardware:=true
+  ros2 launch agilex_piper_ros2_control agilex_piper_cartesian_motion_control.launch.py use_mock_hardware:=true
 
   Then connect Foxglove Studio to ws://<foxglove_bridge_ip>:8765
 
-Test trajectory in another terminal with:
-  ros2 action send_goal /piper_joint_trajectory_controller/follow_joint_trajectory control_msgs/action/FollowJointTrajectory "{
-    trajectory: {
-      joint_names: [joint1, joint2, joint3, joint4, joint5, joint6],
-      points: [
-        { positions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], time_from_start: { sec: 2 } },
-        { positions: [0.785, 0.0, 0.0, 0.0, 0.0, 0.0], time_from_start: { sec: 4 } },
-        { positions: [0.785, 0.524, 0.0, 0.0, 0.0, 0.0], time_from_start: { sec: 6 } },
-        { positions: [0.785, 0.524, -0.524, 0.0, 0.0, 0.0], time_from_start: { sec: 8 } },
-        { positions: [0.0, 0.785, -0.785, 0.524, 0.0, 0.785], time_from_start: { sec: 10 } },
-        { positions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], time_from_start: { sec: 12 } }
-      ]
+Test Cartesian motion commands in another terminal with:
+  ros2 topic pub --once /agilex_piper_cartesian_motion_controller/target_frame geometry_msgs/msg/PoseStamped "{
+    header: {frame_id: 'base_link'},
+    pose: {
+      position: {x: 0.2, y: 0.0, z: 0.2},
+      orientation: {x: 0.0, y: 1.0, z: 0.0, w: 0.0}
     }
   }"
 
 Test gripper commands (when include_gripper=true):
   # Use standard gripper action interface (position = total opening width):
-  ros2 action send_goal /piper_gripper_controller/gripper_cmd control_msgs/action/GripperCommand "{command: {position: 0.05, max_effort: 10.0}}"
+  ros2 action send_goal /agilex_piper_gripper_action_controller/gripper_cmd control_msgs/action/GripperCommand "{command: {position: 0.05, max_effort: 10.0}}"
 
-Or run the Python test script:
-  python3 ros2_ws/install/agilex_piper_ros2_control/share/agilex_piper_ros2_control/examples/test_joint_trajectory.py
+Or you can publish from foxglove studio's built-in publisher panel.
 
 Observe the arm moving in foxglove studio.
 
-NOTE: Use 'use_mock_hardware:=true' for simulation or safe testing without physical hardware!
+NOTE: Use 'use_mock_hardware:=true' for safe testing without physical hardware!
 """
 
 import os
@@ -115,12 +108,14 @@ def launch_setup(context, *args, **kwargs) -> List[Node]:
         pkg_share, 'config', 'controller_manager.yaml'
     )
 
-    joint_trajectory_config = os.path.join(
-        pkg_share, 'config', 'joint_trajectory_controller.yaml'
+    # Select cartesian motion controller config based on gripper (static YAMLs)
+    cartesian_motion_config = os.path.join(
+        pkg_share, 'config',
+        'agilex_piper_cartesian_motion_controller_wi_gripper.yaml' if include_gripper_value.lower() == 'true' else 'agilex_piper_cartesian_motion_controller.yaml'
     )
 
     gripper_config = os.path.join(
-        pkg_share, 'config', 'gripper_controller.yaml'
+        pkg_share, 'config', 'agilex_piper_gripper_action_controller.yaml'
     )
 
     # Foxglove bridge launch file
@@ -162,16 +157,16 @@ def launch_setup(context, *args, **kwargs) -> List[Node]:
             output='screen',
             arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager'],
         ),
-        # Joint trajectory controller spawner
+        # Cartesian motion controller spawner
         Node(
             package='controller_manager',
             executable='spawner',
-            name='joint_trajectory_controller_spawner',
+            name='cartesian_motion_controller_spawner',
             output='screen',
             arguments=[
-                'piper_joint_trajectory_controller',
+                'agilex_piper_cartesian_motion_controller',
                 '--controller-manager', '/controller_manager',
-                '--param-file', joint_trajectory_config,
+                '--param-file', cartesian_motion_config,
             ],
         ),
         # Foxglove bridge for web-based visualization
@@ -189,7 +184,7 @@ def launch_setup(context, *args, **kwargs) -> List[Node]:
                 name='gripper_controller_spawner',
                 output='screen',
                 arguments=[
-                    'piper_gripper_controller',
+                    'agilex_piper_gripper_action_controller',
                     '--controller-manager', '/controller_manager',
                     '--param-file', gripper_config,
                 ],
@@ -200,7 +195,7 @@ def launch_setup(context, *args, **kwargs) -> List[Node]:
 
 
 def generate_launch_description() -> LaunchDescription:
-    """Generate launch description for Agilex Piper arm with joint trajectory control."""
+    """Generate launch description for Agilex Piper arm with Cartesian motion control."""
     # Declare arguments
     can_interface_arg = DeclareLaunchArgument(
         'can_interface',

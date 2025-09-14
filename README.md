@@ -15,7 +15,7 @@ ROS 2 package that provides a ros2_control hardware interface, controller config
 - `urdf/`: Xacro files for the arm, gripper, and ros2_control integration.
 - `config/`: Controller and controller_manager YAML configuration.
 - `launch/`: Launch files for different control modes.
-- `examples/`: Simple trajectory example script.
+- `test/`: Simple trajectory test script.
 
 ## Prerequisites
 - ROS 2 (Jazzy or newer) with `ros2_control` and `ros2_controllers` ecosystem.
@@ -26,7 +26,7 @@ Start controller manager and the configured controllers for different control mo
 
 - Joint trajectory control (FollowJointTrajectory action)
 ```bash
-ros2 launch agilex_piper_ros2_control agilex_piper_trajectory_control.launch.py
+ros2 launch agilex_piper_ros2_control agilex_piper_joint_trajectory_control.launch.py
 ```
 
 - Joint position control (direct command interface)
@@ -36,7 +36,7 @@ ros2 launch agilex_piper_ros2_control agilex_piper_joint_position_control.launch
 
 - Cartesian motion control
 ```bash
-ros2 launch agilex_piper_ros2_control agilex_piper_cartesian_control.launch.py
+ros2 launch agilex_piper_ros2_control agilex_piper_cartesian_motion_control.launch.py
 ```
 
 After launching, introspect controllers and hardware:
@@ -54,11 +54,11 @@ ros2 control list_controllers
 ## Controllers
 Controller configurations live under `config/`:
 - `controller_manager.yaml`: Controller manager settings and controller load configuration.
-- `joint_trajectory_controller.yaml`: Joint trajectory controller parameters.
-- `joint_position_controller.yaml`: Joint position (forward command) controller parameters.
-- `gripper_controller.yaml`: Gripper command controller parameters.
-- `cartesian_motion_controller.yaml`: Cartesian motion controller parameters.
-- `motion_control_handle.yaml`: Motion control handle configuration (if used by the cartesian controller).
+- `agilex_piper_joint_trajectory_controller.yaml`: Joint trajectory controller parameters.
+- `agilex_piper_joint_position_controller.yaml`: Joint position (forward command) controller parameters.
+- `agilex_piper_gripper_action_controller.yaml`: Gripper command controller parameters.
+- `agilex_piper_cartesian_motion_controller.yaml`: Cartesian motion controller parameters.
+- `agilex_piper_motion_control_handle.yaml`: Motion control handle configuration (if used by the cartesian controller).
 
 Controller names and exact parameters are defined in the YAML files and loaded by the launch files.
 
@@ -78,11 +78,11 @@ Adjust arguments as needed (see Xacro files for available parameters).
 With the trajectory controller running:
 ```bash
 # Terminal 1
-ros2 launch agilex_piper_ros2_control agilex_piper_trajectory_control.launch.py
+ros2 launch agilex_piper_ros2_control agilex_piper_joint_trajectory_control.launch.py
 
 # Terminal 2
 source ~/ros2_ws/install/setup.bash
-python3 ~/ros2_ws/src/robots/agilex_piper_arm/agilex_piper_ros2_control/examples/test_joint_trajectory.py
+python3 ~/ros2_ws/src/robots/agilex_piper_arm/agilex_piper_ros2_control/test/test_joint_trajectory.py
 ```
 The script publishes a simple trajectory to the configured `joint_trajectory_controller`.
 

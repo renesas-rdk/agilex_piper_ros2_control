@@ -1,7 +1,7 @@
 # Joint Position Controller Configuration for Agilex Piper Arm
 # This controller provides direct position commands to individual joints
 
-piper_joint_position_controller:
+agilex_piper_joint_position_controller:
   ros__parameters:
     # Joint specification
     joints:

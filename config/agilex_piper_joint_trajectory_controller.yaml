@@ -1,7 +1,7 @@
 # Joint Trajectory Controller Configuration for Agilex Piper Arm
 # This controller provides standard joint-space trajectory following
 
-piper_joint_trajectory_controller:
+agilex_piper_joint_trajectory_controller:
   ros__parameters:
     # Joint specification
     joints:

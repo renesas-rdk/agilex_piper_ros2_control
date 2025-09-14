@@ -49,13 +49,13 @@ install(
   DESTINATION include
 )
 
-# Install config, launch, urdf, and example files
+# Install config, launch, urdf, and test files
 install(
   DIRECTORY
     config
     launch
     urdf
-    examples
+    test
   DESTINATION share/${PROJECT_NAME}
 )
 
