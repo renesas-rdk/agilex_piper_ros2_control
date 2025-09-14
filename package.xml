@@ -39,7 +39,6 @@
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>xacro</exec_depend>
   <exec_depend>agilex_piper_arm_description</exec_depend>
-  <exec_depend>agilex_piper_gripper_description</exec_depend>
 
   <!-- Launch file dependencies -->
   <exec_depend>launch</exec_depend>
