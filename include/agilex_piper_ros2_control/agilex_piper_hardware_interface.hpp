@@ -40,7 +40,8 @@ public:
   RCLCPP_SHARED_PTR_DEFINITIONS(AgilexPiperHardwareInterface)
 
   AGILEX_PIPER_ROS2_CONTROL_PUBLIC
-  CallbackReturn on_init(const hardware_interface::HardwareComponentInterfaceParams & params) override;
+  CallbackReturn on_init(
+    const hardware_interface::HardwareComponentInterfaceParams & params) override;
 
   AGILEX_PIPER_ROS2_CONTROL_PUBLIC
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
@@ -76,6 +77,15 @@ private:
   // Gripper control helper methods
   void update_gripper_positions_from_api(double api_position);
 
+  // GPIO helper methods
+  void initialize_gpio_interfaces();
+  void update_gpio_states();
+  void apply_gpio_commands();
+  double hw_pose_units_to_meters(int hw_units) const;
+  int meters_to_hw_pose_units(double meters) const;
+  double hw_pose_units_to_radians(int hw_units) const;
+  int radians_to_hw_pose_units(double radians) const;
+
   // Joint state and command storage
   std::vector<double> hw_joint_positions_;
   std::vector<double> hw_joint_velocities_;
@@ -86,6 +96,44 @@ private:
   std::vector<double> hw_gripper_velocities_;
   std::vector<double> hw_gripper_position_commands_;
   std::vector<double> hw_gripper_effort_commands_;
+
+  // GPIO state and command storage for extended features
+  // arm_admin GPIO
+  double gpio_arm_enable_state_;
+  double gpio_arm_enable_command_;
+  double gpio_arm_connected_state_;
+
+  // arm_current_pose GPIO
+  double gpio_pose_x_state_;
+  double gpio_pose_y_state_;
+  double gpio_pose_z_state_;
+  double gpio_pose_rx_state_;
+  double gpio_pose_ry_state_;
+  double gpio_pose_rz_state_;
+
+  // arm_target_pose GPIO (Cartesian mode only)
+  double gpio_target_pose_x_command_;
+  double gpio_target_pose_y_command_;
+  double gpio_target_pose_z_command_;
+  double gpio_target_pose_rx_command_;
+  double gpio_target_pose_ry_command_;
+  double gpio_target_pose_rz_command_;
+
+  // arm_status GPIO
+  double gpio_ctrl_mode_state_;
+  double gpio_arm_status_state_;
+  double gpio_mode_feed_state_;
+  double gpio_teach_status_state_;
+  double gpio_motion_status_state_;
+  double gpio_trajectory_num_state_;
+  double gpio_err_code_comm_state_;
+  double gpio_err_code_angle_state_;
+
+  // arm_motion_mode GPIO
+  double gpio_motion_mode_state_;
+  double gpio_motion_mode_command_;
+  double gpio_speed_state_;
+  double gpio_speed_command_;
 
   // Hardware communication
   std::unique_ptr<agilex::piper::PiperController> piper_controller_;

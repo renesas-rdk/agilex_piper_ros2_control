@@ -83,6 +83,55 @@
           <state_interface name="velocity"/>
         </joint>
       </xacro:if>
+
+      <!-- GPIO interfaces for extended arm features -->
+      <!-- Administrative control GPIO -->
+      <gpio name="${prefix}arm_admin">
+        <command_interface name="enable_arm"/>
+        <state_interface name="enable_arm"/>
+        <state_interface name="connected"/>
+      </gpio>
+
+      <!-- End effector pose feedback GPIO -->
+      <gpio name="${prefix}arm_current_pose">
+        <state_interface name="x"/>
+        <state_interface name="y"/>
+        <state_interface name="z"/>
+        <state_interface name="rx"/>
+        <state_interface name="ry"/>
+        <state_interface name="rz"/>
+      </gpio>
+
+      <!-- Target pose commands GPIO (Cartesian mode only) -->
+      <gpio name="${prefix}arm_target_pose">
+        <command_interface name="x"/>
+        <command_interface name="y"/>
+        <command_interface name="z"/>
+        <command_interface name="rx"/>
+        <command_interface name="ry"/>
+        <command_interface name="rz"/>
+      </gpio>
+
+      <!-- Comprehensive status monitoring GPIO -->
+      <gpio name="${prefix}arm_status">
+        <state_interface name="ctrl_mode"/>
+        <state_interface name="arm_status"/>
+        <state_interface name="mode_feed"/>
+        <state_interface name="teach_status"/>
+        <state_interface name="motion_status"/>
+        <state_interface name="trajectory_num"/>
+        <state_interface name="err_code_comm"/>
+        <state_interface name="err_code_angle"/>
+      </gpio>
+
+      <!-- Motion mode control GPIO -->
+      <gpio name="${prefix}arm_motion_mode">
+        <command_interface name="mode"/>
+        <command_interface name="speed"/>
+        <state_interface name="mode"/>
+        <state_interface name="speed"/>
+      </gpio>
+
     </ros2_control>
 
   </xacro:macro>

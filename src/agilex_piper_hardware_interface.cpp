@@ -71,6 +71,9 @@ hardware_interface::CallbackReturn AgilexPiperHardwareInterface::on_init(
     hw_gripper_effort_commands_.resize(NUM_GRIPPER_JOINTS, 0.0);
   }
 
+  // Initialize GPIO state and command variables
+  initialize_gpio_interfaces();
+
   // Initialize state
   hardware_connected_ = false;
   first_read_completed_ = false;
@@ -117,6 +120,53 @@ AgilexPiperHardwareInterface::export_state_interfaces()
     }
   }
 
+  // Export GPIO state interfaces for extended features
+  // arm_admin GPIO state interfaces
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_admin", "enable_arm", &gpio_arm_enable_state_));
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_admin", "connected", &gpio_arm_connected_state_));
+
+  // arm_current_pose GPIO state interfaces
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_current_pose", "x", &gpio_pose_x_state_));
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_current_pose", "y", &gpio_pose_y_state_));
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_current_pose", "z", &gpio_pose_z_state_));
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_current_pose", "rx", &gpio_pose_rx_state_));
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_current_pose", "ry", &gpio_pose_ry_state_));
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_current_pose", "rz", &gpio_pose_rz_state_));
+
+  // arm_status GPIO state interfaces
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_status", "ctrl_mode", &gpio_ctrl_mode_state_));
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_status", "arm_status", &gpio_arm_status_state_));
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_status", "mode_feed", &gpio_mode_feed_state_));
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_status", "teach_status", &gpio_teach_status_state_));
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_status", "motion_status", &gpio_motion_status_state_));
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface(
+      "arm_status", "trajectory_num", &gpio_trajectory_num_state_));
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_status", "err_code_comm", &gpio_err_code_comm_state_));
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface(
+      "arm_status", "err_code_angle", &gpio_err_code_angle_state_));
+
+  // arm_motion_mode GPIO state interfaces
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_motion_mode", "mode", &gpio_motion_mode_state_));
+  state_interfaces.emplace_back(
+    hardware_interface::StateInterface("arm_motion_mode", "speed", &gpio_speed_state_));
+
   return state_interfaces;
 }
 
@@ -148,6 +198,31 @@ AgilexPiperHardwareInterface::export_command_interfaces()
     }
   }
 
+  // Export GPIO command interfaces for extended features
+  // arm_admin GPIO command interfaces
+  command_interfaces.emplace_back(
+    hardware_interface::CommandInterface("arm_admin", "enable_arm", &gpio_arm_enable_command_));
+
+  // arm_target_pose GPIO command interfaces (Cartesian mode only)
+  command_interfaces.emplace_back(
+    hardware_interface::CommandInterface("arm_target_pose", "x", &gpio_target_pose_x_command_));
+  command_interfaces.emplace_back(
+    hardware_interface::CommandInterface("arm_target_pose", "y", &gpio_target_pose_y_command_));
+  command_interfaces.emplace_back(
+    hardware_interface::CommandInterface("arm_target_pose", "z", &gpio_target_pose_z_command_));
+  command_interfaces.emplace_back(
+    hardware_interface::CommandInterface("arm_target_pose", "rx", &gpio_target_pose_rx_command_));
+  command_interfaces.emplace_back(
+    hardware_interface::CommandInterface("arm_target_pose", "ry", &gpio_target_pose_ry_command_));
+  command_interfaces.emplace_back(
+    hardware_interface::CommandInterface("arm_target_pose", "rz", &gpio_target_pose_rz_command_));
+
+  // arm_motion_mode GPIO command interfaces
+  command_interfaces.emplace_back(
+    hardware_interface::CommandInterface("arm_motion_mode", "mode", &gpio_motion_mode_command_));
+  command_interfaces.emplace_back(
+    hardware_interface::CommandInterface("arm_motion_mode", "speed", &gpio_speed_command_));
+
   return command_interfaces;
 }
 
@@ -176,6 +251,9 @@ hardware_interface::CallbackReturn AgilexPiperHardwareInterface::on_activate(
       RCLCPP_ERROR(
         rclcpp::get_logger("AgilexPiperHardwareInterface"), "Failed to enable arm motors");
       return CallbackReturn::ERROR;
+    } else {
+      gpio_arm_enable_state_ = 1.0;
+      gpio_arm_enable_command_ = 1.0;
     }
 
     // Enable gripper
@@ -333,6 +411,9 @@ hardware_interface::return_type AgilexPiperHardwareInterface::read(
       first_read_completed_ = true;
     }
 
+    // Update GPIO state interfaces
+    update_gpio_states();
+
     return hardware_interface::return_type::OK;
 
   } catch (const std::exception & e) {
@@ -350,6 +431,9 @@ hardware_interface::return_type AgilexPiperHardwareInterface::write(
   }
 
   try {
+    // Apply GPIO commands first (may affect hardware state)
+    apply_gpio_commands();
+
     // Convert joint commands from radians to hardware units
     int j1_cmd = rad_to_hw_units(hw_joint_position_commands_[0]);
     int j2_cmd = rad_to_hw_units(hw_joint_position_commands_[1]);
@@ -456,6 +540,233 @@ void AgilexPiperHardwareInterface::update_gripper_positions_from_api(double api_
     hw_gripper_positions_[0] = api_position;   // joint7: total opening width
     hw_gripper_positions_[1] = -half_opening;  // joint8: individual finger position
   }
+}
+
+void AgilexPiperHardwareInterface::initialize_gpio_interfaces()
+{
+  // Initialize arm_admin GPIO
+  gpio_arm_enable_state_ = 0.0;
+  gpio_arm_enable_command_ = 0.0;
+  gpio_arm_connected_state_ = 0.0;
+
+  // Initialize arm_current_pose GPIO
+  gpio_pose_x_state_ = 0.0;
+  gpio_pose_y_state_ = 0.0;
+  gpio_pose_z_state_ = 0.0;
+  gpio_pose_rx_state_ = 0.0;
+  gpio_pose_ry_state_ = 0.0;
+  gpio_pose_rz_state_ = 0.0;
+
+  // Initialize arm_target_pose GPIO
+  gpio_target_pose_x_command_ = 0.0;
+  gpio_target_pose_y_command_ = 0.0;
+  gpio_target_pose_z_command_ = 0.0;
+  gpio_target_pose_rx_command_ = 0.0;
+  gpio_target_pose_ry_command_ = 0.0;
+  gpio_target_pose_rz_command_ = 0.0;
+
+  // Initialize arm_status GPIO
+  gpio_ctrl_mode_state_ = 0.0;
+  gpio_arm_status_state_ = 0.0;
+  gpio_mode_feed_state_ = 0.0;
+  gpio_teach_status_state_ = 0.0;
+  gpio_motion_status_state_ = 0.0;
+  gpio_trajectory_num_state_ = 0.0;
+  gpio_err_code_comm_state_ = 0.0;
+  gpio_err_code_angle_state_ = 0.0;
+
+  // Initialize arm_motion_mode GPIO
+  gpio_motion_mode_state_ = 1.0;  // Default to joint mode
+  gpio_motion_mode_command_ = 1.0;
+  gpio_speed_state_ = 50.0;  // Default speed 50%
+  gpio_speed_command_ = 50.0;
+}
+
+void AgilexPiperHardwareInterface::update_gpio_states()
+{
+  if (!hardware_connected_ || !piper_controller_) {
+    gpio_arm_connected_state_ = 0.0;
+    return;
+  }
+
+  // Update arm_admin states
+  gpio_arm_connected_state_ = piper_controller_->is_connected() ? 1.0 : 0.0;
+
+  // Update arm_current_pose states from hardware
+  try {
+    auto end_pose = piper_controller_->get_arm_end_pose();
+    gpio_pose_x_state_ = hw_pose_units_to_meters(end_pose.x);
+    gpio_pose_y_state_ = hw_pose_units_to_meters(end_pose.y);
+    gpio_pose_z_state_ = hw_pose_units_to_meters(end_pose.z);
+    gpio_pose_rx_state_ = hw_pose_units_to_radians(end_pose.rx);
+    gpio_pose_ry_state_ = hw_pose_units_to_radians(end_pose.ry);
+    gpio_pose_rz_state_ = hw_pose_units_to_radians(end_pose.rz);
+  } catch (const std::exception & e) {
+    static auto clock = rclcpp::Clock();
+    RCLCPP_WARN_THROTTLE(
+      rclcpp::get_logger("AgilexPiperHardwareInterface"), clock, 5000,
+      "Failed to update end pose states: %s", e.what());
+  }
+
+  // Update arm_status states from hardware
+  try {
+    auto arm_status = piper_controller_->get_arm_status();
+    gpio_ctrl_mode_state_ = static_cast<double>(arm_status.ctrl_mode);
+    gpio_arm_status_state_ = static_cast<double>(arm_status.arm_status);
+    gpio_mode_feed_state_ = static_cast<double>(arm_status.mode_feed);
+    gpio_teach_status_state_ = static_cast<double>(arm_status.teach_status);
+    gpio_motion_status_state_ = static_cast<double>(arm_status.motion_status);
+    gpio_trajectory_num_state_ = static_cast<double>(arm_status.trajectory_num);
+    gpio_err_code_comm_state_ = static_cast<double>(arm_status.err_code_comm);
+    gpio_err_code_angle_state_ = static_cast<double>(arm_status.err_code_angle);
+  } catch (const std::exception & e) {
+    static auto clock = rclcpp::Clock();
+    RCLCPP_WARN_THROTTLE(
+      rclcpp::get_logger("AgilexPiperHardwareInterface"), clock, 5000,
+      "Failed to update arm status states: %s", e.what());
+  }
+}
+
+void AgilexPiperHardwareInterface::apply_gpio_commands()
+{
+  if (!hardware_connected_ || !piper_controller_) {
+    return;
+  }
+
+  // Apply arm_admin commands
+  if (std::abs(gpio_arm_enable_command_ - gpio_arm_enable_state_) > 0.5) {
+    bool enable_arm = gpio_arm_enable_command_ > 0.5;
+    try {
+      if (enable_arm) {
+        if (piper_controller_->enable_arm()) {
+          gpio_arm_enable_state_ = 1.0;
+          piper_controller_->set_mode(0x01, 0x01, 50);
+          RCLCPP_INFO(
+            rclcpp::get_logger("AgilexPiperHardwareInterface"), "Arm enabled via GPIO command");
+        }
+      } else {
+        if (piper_controller_->disable_arm()) {
+          gpio_arm_enable_state_ = 0.0;
+          piper_controller_->set_mode(0x01, 0x01, 50);
+          RCLCPP_INFO(
+            rclcpp::get_logger("AgilexPiperHardwareInterface"), "Arm disabled via GPIO command");
+        }
+      }
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR(
+        rclcpp::get_logger("AgilexPiperHardwareInterface"),
+        "Failed to apply arm enable command: %s", e.what());
+    }
+  }
+
+  // Apply arm_motion_mode commands
+  if (
+    std::abs(gpio_motion_mode_command_ - gpio_motion_mode_state_) > 0.5 ||
+    std::abs(gpio_speed_command_ - gpio_speed_state_) > 0.5) {
+    try {
+      uint8_t mode = static_cast<uint8_t>(gpio_motion_mode_command_);
+      uint8_t speed = static_cast<uint8_t>(std::clamp(gpio_speed_command_, 1.0, 100.0));
+
+      if (piper_controller_->set_mode(0x01, mode, speed, 0)) {
+        gpio_motion_mode_state_ = gpio_motion_mode_command_;
+        gpio_speed_state_ = gpio_speed_command_;
+        RCLCPP_INFO(
+          rclcpp::get_logger("AgilexPiperHardwareInterface"),
+          "Motion mode set to %s with speed %d%% via GPIO command",
+          mode == 0 ? "Cartesian" : "Joint", speed);
+      }
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR(
+        rclcpp::get_logger("AgilexPiperHardwareInterface"),
+        "Failed to apply motion mode command: %s", e.what());
+    }
+  }
+
+  // Apply arm_target_pose commands (only valid in Cartesian motion mode)
+  static double prev_target_x = gpio_target_pose_x_command_;
+  static double prev_target_y = gpio_target_pose_y_command_;
+  static double prev_target_z = gpio_target_pose_z_command_;
+  static double prev_target_rx = gpio_target_pose_rx_command_;
+  static double prev_target_ry = gpio_target_pose_ry_command_;
+  static double prev_target_rz = gpio_target_pose_rz_command_;
+
+  const double pose_threshold = 0.001;  // 1mm position or 0.001 rad threshold
+
+  if (
+    std::abs(gpio_target_pose_x_command_ - prev_target_x) > pose_threshold ||
+    std::abs(gpio_target_pose_y_command_ - prev_target_y) > pose_threshold ||
+    std::abs(gpio_target_pose_z_command_ - prev_target_z) > pose_threshold ||
+    std::abs(gpio_target_pose_rx_command_ - prev_target_rx) > pose_threshold ||
+    std::abs(gpio_target_pose_ry_command_ - prev_target_ry) > pose_threshold ||
+    std::abs(gpio_target_pose_rz_command_ - prev_target_rz) > pose_threshold) {
+    // Check if arm is in Cartesian motion mode (0 = Cartesian, 1 = Joint)
+    if (gpio_motion_mode_state_ != 0.0) {
+      static auto clock = rclcpp::Clock();
+      RCLCPP_WARN_THROTTLE(
+        rclcpp::get_logger("AgilexPiperHardwareInterface"), clock, 2000,
+        "Target pose commands ignored: arm not in Cartesian motion mode (current mode: %.0f)",
+        gpio_motion_mode_state_);
+      return;
+    }
+
+    try {
+      int x = meters_to_hw_pose_units(gpio_target_pose_x_command_);
+      int y = meters_to_hw_pose_units(gpio_target_pose_y_command_);
+      int z = meters_to_hw_pose_units(gpio_target_pose_z_command_);
+      int rx = radians_to_hw_pose_units(gpio_target_pose_rx_command_);
+      int ry = radians_to_hw_pose_units(gpio_target_pose_ry_command_);
+      int rz = radians_to_hw_pose_units(gpio_target_pose_rz_command_);
+
+      if (piper_controller_->set_end_pose(x, y, z, rx, ry, rz)) {
+        // Update previous values to prevent repeated commands
+        prev_target_x = gpio_target_pose_x_command_;
+        prev_target_y = gpio_target_pose_y_command_;
+        prev_target_z = gpio_target_pose_z_command_;
+        prev_target_rx = gpio_target_pose_rx_command_;
+        prev_target_ry = gpio_target_pose_ry_command_;
+        prev_target_rz = gpio_target_pose_rz_command_;
+
+        RCLCPP_INFO(
+          rclcpp::get_logger("AgilexPiperHardwareInterface"),
+          "Target pose command applied via GPIO (Cartesian mode): [%.3f, %.3f, %.3f, %.3f, %.3f, "
+          "%.3f]",
+          gpio_target_pose_x_command_, gpio_target_pose_y_command_, gpio_target_pose_z_command_,
+          gpio_target_pose_rx_command_, gpio_target_pose_ry_command_, gpio_target_pose_rz_command_);
+      } else {
+        RCLCPP_ERROR(
+          rclcpp::get_logger("AgilexPiperHardwareInterface"),
+          "Failed to send target pose command to hardware");
+      }
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR(
+        rclcpp::get_logger("AgilexPiperHardwareInterface"),
+        "Failed to apply target pose command: %s", e.what());
+    }
+  }
+}
+
+double AgilexPiperHardwareInterface::hw_pose_units_to_meters(int hw_units) const
+{
+  // Convert from hardware units (0.001 mm) to meters
+  return static_cast<double>(hw_units) * 0.000001;
+}
+
+int AgilexPiperHardwareInterface::meters_to_hw_pose_units(double meters) const
+{
+  // Convert from meters to hardware units (0.001 mm)
+  return static_cast<int>(meters * 1000000.0);
+}
+
+double AgilexPiperHardwareInterface::hw_pose_units_to_radians(int hw_units) const
+{
+  // Convert from hardware units (degrees * 1000) to radians
+  return static_cast<double>(hw_units) * 0.001 * M_PI / 180.0;
+}
+
+int AgilexPiperHardwareInterface::radians_to_hw_pose_units(double radians) const
+{
+  // Convert from radians to hardware units (degrees * 1000)
+  return static_cast<int>(radians * 180.0 / M_PI * 1000.0);
 }
 
 }  // namespace agilex_piper_ros2_control

@@ -6,6 +6,15 @@ ROS 2 package that provides a ros2_control hardware interface for the AgileX Pip
 - ros2_control hardware interface plugin (exported via `hardware_interface_plugin.xml`)
 - Hardware interface implementation for CAN communication with the robot
 - ros2_control URDF macro for hardware interface integration
+- **GPIO controller integration** for extended arm features (enable/disable, pose feedback, status monitoring)
+
+## GPIO Controller Extensions
+This package now includes GPIO controller interfaces, providing access to:
+- **arm_admin**: Administrative control (enable/disable arm, connection status)
+- **arm_current_pose**: End effector pose feedback (read-only monitoring)
+- **arm_target_pose**: Target pose commands (Cartesian mode only, command-only)
+- **arm_status**: Comprehensive arm status monitoring (control mode, errors, teaching status)
+- **arm_motion_mode**: Motion mode and speed control (built-in arm feature)
 
 ## Related Packages
 - **agilex_piper_arm_bringup**: Contains launch files, controller configurations, robot URDF descriptions, and test scripts for running the robot
@@ -13,6 +22,7 @@ ROS 2 package that provides a ros2_control hardware interface for the AgileX Pip
 
 ## Package layout
 - `include/` / `src/`: Hardware interface implementation (`agilex_piper_hardware_interface`)
+- `config/`: GPIO controller configuration (`agilex_piper_gpio_controller.yaml`)
 - `urdf/`: ros2_control URDF macro for hardware interface integration
 - `hardware_interface_plugin.xml`: Plugin description file for the hardware interface
 
@@ -66,6 +76,13 @@ The hardware interface supports the following configuration options:
 - `use_mock_hardware`: Set to "true" for simulation/testing without physical hardware
 - `include_gripper`: Set to "true" to include gripper interfaces
 - `prefix`: Namespace prefix for joint names (optional)
+
+### GPIO Controller Usage
+To use the GPIO controller features, load the GPIO controller configuration:
+```bash
+# Load GPIO controller via controller manager
+ros2 run controller_manager spawner agilex_piper_gpio_controller --controller-manager /controller_manager
+```
 
 ## Development
 For detailed usage examples, launch configurations, controller setups, and test scripts, see the `agilex_piper_arm_bringup` package.
