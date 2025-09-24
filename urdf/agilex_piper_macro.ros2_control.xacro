@@ -12,6 +12,8 @@
     can_interface:=can0
     use_mock_hardware:=false
     include_gripper:=true
+    motion_mode:=1
+    speed:=50
     prefix:=''
     ">
 
@@ -27,6 +29,8 @@
           <plugin>agilex_piper_ros2_control/AgilexPiperHardwareInterface</plugin>
           <param name="can_interface">${can_interface}</param>
           <param name="include_gripper">${include_gripper}</param>
+          <param name="motion_mode">${motion_mode}</param>
+          <param name="speed">${speed}</param>
         </xacro:unless>
       </hardware>
 

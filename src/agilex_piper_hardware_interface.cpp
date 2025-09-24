@@ -58,6 +58,46 @@ hardware_interface::CallbackReturn AgilexPiperHardwareInterface::on_init(
     include_gripper_ = (it->second == "true" || it->second == "True" || it->second == "1");
   }
 
+  // Parse motion_mode parameter (default: 1 = joint mode)
+  motion_mode_ = 1;
+  it = info_.hardware_parameters.find("motion_mode");
+  if (it != info_.hardware_parameters.end()) {
+    try {
+      motion_mode_ = std::stoi(it->second);
+      if (motion_mode_ < 0 || motion_mode_ > 1) {
+        RCLCPP_WARN(
+          rclcpp::get_logger("AgilexPiperHardwareInterface"),
+          "Invalid motion_mode value: %d. Using default value 1 (joint mode)", motion_mode_);
+        motion_mode_ = 1;
+      }
+    } catch (const std::exception & e) {
+      RCLCPP_WARN(
+        rclcpp::get_logger("AgilexPiperHardwareInterface"),
+        "Failed to parse motion_mode parameter: %s. Using default value 1", e.what());
+      motion_mode_ = 1;
+    }
+  }
+
+  // Parse speed parameter (default: 50)
+  speed_ = 50;
+  it = info_.hardware_parameters.find("speed");
+  if (it != info_.hardware_parameters.end()) {
+    try {
+      speed_ = std::stoi(it->second);
+      if (speed_ < 1 || speed_ > 100) {
+        RCLCPP_WARN(
+          rclcpp::get_logger("AgilexPiperHardwareInterface"),
+          "Invalid speed value: %d. Speed should be between 1-100. Using default value 50", speed_);
+        speed_ = 50;
+      }
+    } catch (const std::exception & e) {
+      RCLCPP_WARN(
+        rclcpp::get_logger("AgilexPiperHardwareInterface"),
+        "Failed to parse speed parameter: %s. Using default value 50", e.what());
+      speed_ = 50;
+    }
+  }
+
   // Initialize joint data structures
   hw_joint_positions_.resize(NUM_JOINTS, 0.0);
   hw_joint_velocities_.resize(NUM_JOINTS, 0.0);
@@ -80,8 +120,8 @@ hardware_interface::CallbackReturn AgilexPiperHardwareInterface::on_init(
 
   RCLCPP_INFO(
     rclcpp::get_logger("AgilexPiperHardwareInterface"),
-    "Initialized with CAN interface: %s, include_gripper: %s", can_interface_.c_str(),
-    include_gripper_ ? "true" : "false");
+    "Initialized with CAN interface: %s, include_gripper: %s, motion_mode: %d, speed: %d",
+    can_interface_.c_str(), include_gripper_ ? "true" : "false", motion_mode_, speed_);
 
   return CallbackReturn::SUCCESS;
 }
@@ -263,11 +303,11 @@ hardware_interface::CallbackReturn AgilexPiperHardwareInterface::on_activate(
       }
     }
 
-    // Set control mode to position control
-    if (!piper_controller_->set_mode(0x01, 0x01, 50)) {
+    // Set control mode to position control with configured motion mode and speed
+    if (!piper_controller_->set_mode(0x01, motion_mode_, speed_)) {
       RCLCPP_ERROR(
         rclcpp::get_logger("AgilexPiperHardwareInterface"),
-        "Failed to set control mode to position mode");
+        "Failed to set control mode with motion_mode: %d, speed: %d", motion_mode_, speed_);
       return CallbackReturn::ERROR;
     }
 
@@ -579,11 +619,11 @@ void AgilexPiperHardwareInterface::initialize_gpio_interfaces()
   gpio_err_code_comm_state_ = 0.0;
   gpio_err_code_angle_state_ = 0.0;
 
-  // Initialize arm_motion_mode GPIO
-  gpio_motion_mode_state_ = 1.0;  // Default to joint mode
-  gpio_motion_mode_command_ = 1.0;
-  gpio_speed_state_ = 50.0;  // Default speed 50%
-  gpio_speed_command_ = 50.0;
+  // Initialize arm_motion_mode GPIO with configured values
+  gpio_motion_mode_state_ = static_cast<double>(motion_mode_);
+  gpio_motion_mode_command_ = static_cast<double>(motion_mode_);
+  gpio_speed_state_ = static_cast<double>(speed_);
+  gpio_speed_command_ = static_cast<double>(speed_);
 }
 
 void AgilexPiperHardwareInterface::update_gpio_states()
@@ -644,14 +684,14 @@ void AgilexPiperHardwareInterface::apply_gpio_commands()
       if (enable_arm) {
         if (piper_controller_->enable_arm()) {
           gpio_arm_enable_state_ = 1.0;
-          piper_controller_->set_mode(0x01, 0x01, 50);
+          piper_controller_->set_mode(0x01, motion_mode_, speed_);
           RCLCPP_INFO(
             rclcpp::get_logger("AgilexPiperHardwareInterface"), "Arm enabled via GPIO command");
         }
       } else {
         if (piper_controller_->disable_arm()) {
           gpio_arm_enable_state_ = 0.0;
-          piper_controller_->set_mode(0x01, 0x01, 50);
+          piper_controller_->set_mode(0x01, motion_mode_, speed_);
           RCLCPP_INFO(
             rclcpp::get_logger("AgilexPiperHardwareInterface"), "Arm disabled via GPIO command");
         }
@@ -668,16 +708,16 @@ void AgilexPiperHardwareInterface::apply_gpio_commands()
     std::abs(gpio_motion_mode_command_ - gpio_motion_mode_state_) > 0.5 ||
     std::abs(gpio_speed_command_ - gpio_speed_state_) > 0.5) {
     try {
-      uint8_t mode = static_cast<uint8_t>(gpio_motion_mode_command_);
-      uint8_t speed = static_cast<uint8_t>(std::clamp(gpio_speed_command_, 1.0, 100.0));
+      motion_mode_ = static_cast<int>(gpio_motion_mode_command_);
+      speed_ = static_cast<int>(std::clamp(gpio_speed_command_, 1.0, 100.0));
 
-      if (piper_controller_->set_mode(0x01, mode, speed, 0)) {
+      if (piper_controller_->set_mode(0x01, motion_mode_, speed_)) {
         gpio_motion_mode_state_ = gpio_motion_mode_command_;
         gpio_speed_state_ = gpio_speed_command_;
         RCLCPP_INFO(
           rclcpp::get_logger("AgilexPiperHardwareInterface"),
           "Motion mode set to %s with speed %d%% via GPIO command",
-          mode == 0 ? "Cartesian" : "Joint", speed);
+          motion_mode_ == 0 ? "Cartesian" : "Joint", speed_);
       }
     } catch (const std::exception & e) {
       RCLCPP_ERROR(
@@ -696,14 +736,7 @@ void AgilexPiperHardwareInterface::apply_gpio_commands()
       int ry = radians_to_hw_pose_units(gpio_target_pose_ry_command_);
       int rz = radians_to_hw_pose_units(gpio_target_pose_rz_command_);
 
-      if (piper_controller_->set_end_pose(x, y, z, rx, ry, rz)) {
-        RCLCPP_INFO(
-          rclcpp::get_logger("AgilexPiperHardwareInterface"),
-          "Target pose command applied via GPIO (Cartesian mode): [%.3f, %.3f, %.3f, %.3f, %.3f, "
-          "%.3f]",
-          gpio_target_pose_x_command_, gpio_target_pose_y_command_, gpio_target_pose_z_command_,
-          gpio_target_pose_rx_command_, gpio_target_pose_ry_command_, gpio_target_pose_rz_command_);
-      } else {
+      if (!piper_controller_->set_end_pose(x, y, z, rx, ry, rz)) {
         RCLCPP_ERROR(
           rclcpp::get_logger("AgilexPiperHardwareInterface"),
           "Failed to send target pose command to hardware");

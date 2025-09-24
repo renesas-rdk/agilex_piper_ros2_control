@@ -141,6 +141,8 @@ private:
   // Configuration parameters
   std::string can_interface_;
   bool include_gripper_;
+  int motion_mode_;
+  int speed_;
 
   // Runtime state
   bool hardware_connected_;
