@@ -683,32 +683,7 @@ void AgilexPiperHardwareInterface::apply_gpio_commands()
   }
 
   // Apply arm_target_pose commands (only valid in Cartesian motion mode)
-  static double prev_target_x = gpio_target_pose_x_command_;
-  static double prev_target_y = gpio_target_pose_y_command_;
-  static double prev_target_z = gpio_target_pose_z_command_;
-  static double prev_target_rx = gpio_target_pose_rx_command_;
-  static double prev_target_ry = gpio_target_pose_ry_command_;
-  static double prev_target_rz = gpio_target_pose_rz_command_;
-
-  const double pose_threshold = 0.001;  // 1mm position or 0.001 rad threshold
-
-  if (
-    std::abs(gpio_target_pose_x_command_ - prev_target_x) > pose_threshold ||
-    std::abs(gpio_target_pose_y_command_ - prev_target_y) > pose_threshold ||
-    std::abs(gpio_target_pose_z_command_ - prev_target_z) > pose_threshold ||
-    std::abs(gpio_target_pose_rx_command_ - prev_target_rx) > pose_threshold ||
-    std::abs(gpio_target_pose_ry_command_ - prev_target_ry) > pose_threshold ||
-    std::abs(gpio_target_pose_rz_command_ - prev_target_rz) > pose_threshold) {
-    // Check if arm is in Cartesian motion mode (0 = Cartesian, 1 = Joint)
-    if (gpio_motion_mode_state_ != 0.0) {
-      static auto clock = rclcpp::Clock();
-      RCLCPP_WARN_THROTTLE(
-        rclcpp::get_logger("AgilexPiperHardwareInterface"), clock, 2000,
-        "Target pose commands ignored: arm not in Cartesian motion mode (current mode: %.0f)",
-        gpio_motion_mode_state_);
-      return;
-    }
-
+  if (gpio_motion_mode_state_ == 0.0) {
     try {
       int x = meters_to_hw_pose_units(gpio_target_pose_x_command_);
       int y = meters_to_hw_pose_units(gpio_target_pose_y_command_);
@@ -718,14 +693,6 @@ void AgilexPiperHardwareInterface::apply_gpio_commands()
       int rz = radians_to_hw_pose_units(gpio_target_pose_rz_command_);
 
       if (piper_controller_->set_end_pose(x, y, z, rx, ry, rz)) {
-        // Update previous values to prevent repeated commands
-        prev_target_x = gpio_target_pose_x_command_;
-        prev_target_y = gpio_target_pose_y_command_;
-        prev_target_z = gpio_target_pose_z_command_;
-        prev_target_rx = gpio_target_pose_rx_command_;
-        prev_target_ry = gpio_target_pose_ry_command_;
-        prev_target_rz = gpio_target_pose_rz_command_;
-
         RCLCPP_INFO(
           rclcpp::get_logger("AgilexPiperHardwareInterface"),
           "Target pose command applied via GPIO (Cartesian mode): [%.3f, %.3f, %.3f, %.3f, %.3f, "
