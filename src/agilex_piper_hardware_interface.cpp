@@ -434,20 +434,24 @@ hardware_interface::return_type AgilexPiperHardwareInterface::write(
     // Apply GPIO commands first (may affect hardware state)
     apply_gpio_commands();
 
-    // Convert joint commands from radians to hardware units
-    int j1_cmd = rad_to_hw_units(hw_joint_position_commands_[0]);
-    int j2_cmd = rad_to_hw_units(hw_joint_position_commands_[1]);
-    int j3_cmd = rad_to_hw_units(hw_joint_position_commands_[2]);
-    int j4_cmd = rad_to_hw_units(hw_joint_position_commands_[3]);
-    int j5_cmd = rad_to_hw_units(hw_joint_position_commands_[4]);
-    int j6_cmd = rad_to_hw_units(hw_joint_position_commands_[5]);
+    // Send joint position commands only in Joint mode (mode 1)
+    // Skip in Cartesian mode (mode 0) to avoid conflicts with built-in Cartesian control
+    if (gpio_motion_mode_state_ != 0.0) {
+      // Convert joint commands from radians to hardware units
+      int j1_cmd = rad_to_hw_units(hw_joint_position_commands_[0]);
+      int j2_cmd = rad_to_hw_units(hw_joint_position_commands_[1]);
+      int j3_cmd = rad_to_hw_units(hw_joint_position_commands_[2]);
+      int j4_cmd = rad_to_hw_units(hw_joint_position_commands_[3]);
+      int j5_cmd = rad_to_hw_units(hw_joint_position_commands_[4]);
+      int j6_cmd = rad_to_hw_units(hw_joint_position_commands_[5]);
 
-    // Send position commands to hardware
-    if (!piper_controller_->set_joint_angles(j1_cmd, j2_cmd, j3_cmd, j4_cmd, j5_cmd, j6_cmd)) {
-      RCLCPP_ERROR(
-        rclcpp::get_logger("AgilexPiperHardwareInterface"),
-        "Failed to send joint position commands to hardware");
-      return hardware_interface::return_type::ERROR;
+      // Send position commands to hardware
+      if (!piper_controller_->set_joint_angles(j1_cmd, j2_cmd, j3_cmd, j4_cmd, j5_cmd, j6_cmd)) {
+        RCLCPP_ERROR(
+          rclcpp::get_logger("AgilexPiperHardwareInterface"),
+          "Failed to send joint position commands to hardware");
+        return hardware_interface::return_type::ERROR;
+      }
     }
 
     // Handle gripper commands
