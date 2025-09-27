@@ -496,40 +496,41 @@ hardware_interface::return_type AgilexPiperHardwareInterface::write(
 
     // Handle gripper commands
     if (include_gripper_) {
-      // Coordinate gripper joints: GripperActionController commands joint7 with total opening width
-      // We need to convert total width to individual joint positions
+      // JointGroupPositionController sends individual commands for both joints
+      // joint7 (left finger): range 0 to +0.035m
+      // joint8 (right finger): range -0.035m to 0
+      // Hardware API expects total gripper opening width
       if (hw_gripper_position_commands_.size() >= 2) {
-        // joint7 command represents total opening width, convert to individual positions
-        double total_opening = hw_gripper_position_commands_[0];  // Total width from controller
-        double half_opening = total_opening * 0.5;                // Half for each finger
+        // Calculate total gripper opening from individual joint positions
+        // Since joint7 opens positively and joint8 opens negatively:
+        // Total opening = |joint7_position| + |joint8_position|
+        double total_opening =
+          std::abs(hw_gripper_position_commands_[0]) + std::abs(hw_gripper_position_commands_[1]);
 
-        // Set individual joint positions
-        hw_gripper_position_commands_[0] = half_opening;   // joint7: +half_opening
-        hw_gripper_position_commands_[1] = -half_opening;  // joint8: -half_opening
+        // Clamp to valid range [0, 0.07m] (max opening is 2 * 0.035m)
+        total_opening = std::clamp(total_opening, 0.0, 0.07);
 
-        // Both joints use the same effort command (from joint7)
-        if (hw_gripper_effort_commands_.size() >= 2) {
-          hw_gripper_effort_commands_[1] = hw_gripper_effort_commands_[0];
+        int gripper_position_cmd = meters_to_hw_gripper_units(total_opening);
+
+        // Use the maximum effort command from either joint
+        double effort_nm = std::max(
+          std::abs(hw_gripper_effort_commands_[0]), std::abs(hw_gripper_effort_commands_[1]));
+
+        // Clamp effort to valid range and use default if too small
+        if (effort_nm < 0.1) {  // If effort command is too small, use default
+          effort_nm = static_cast<double>(DEFAULT_GRIPPER_EFFORT) * HW_TO_NM_FACTOR;
         }
-      }
 
-      // Convert gripper joint commands to API format and send to hardware
-      // Calculate the total gripper opening from the two joint positions
-      // joint7 (left finger): 0 to +0.035m, joint8 (right finger): -0.035m to 0
-      // Total opening = joint7 - joint8 (distance between fingers)
-      double total_opening = hw_gripper_position_commands_[0] - hw_gripper_position_commands_[1];
-      int gripper_position_cmd = meters_to_hw_gripper_units(total_opening);
+        uint16_t gripper_effort_cmd = nm_to_hw_gripper_effort_units(effort_nm);
 
-      // Use the effort command from the controller (joint7) instead of default
-      double effort_nm = hw_gripper_effort_commands_[0];  // Effort in N⋅m from controller
-      uint16_t gripper_effort_cmd = nm_to_hw_gripper_effort_units(
-        effort_nm);  // Send gripper command (enable gripper with position and effort)
-      if (!piper_controller_->control_gripper(
-            gripper_position_cmd, gripper_effort_cmd, GRIPPER_ENABLE, 0x00)) {
-        RCLCPP_ERROR(
-          rclcpp::get_logger("AgilexPiperHardwareInterface"),
-          "Failed to send gripper commands to hardware");
-        return hardware_interface::return_type::ERROR;
+        // Send gripper command (enable gripper with position and effort)
+        if (!piper_controller_->control_gripper(
+              gripper_position_cmd, gripper_effort_cmd, GRIPPER_ENABLE, 0x00)) {
+          RCLCPP_ERROR(
+            rclcpp::get_logger("AgilexPiperHardwareInterface"),
+            "Failed to send gripper commands to hardware");
+          return hardware_interface::return_type::ERROR;
+        }
       }
     }
 
@@ -574,15 +575,16 @@ uint16_t AgilexPiperHardwareInterface::nm_to_hw_gripper_effort_units(double nm) 
 
 void AgilexPiperHardwareInterface::update_gripper_positions_from_api(double api_position)
 {
-  // The API position represents the total opening distance
-  // For state feedback: joint7 reports total opening, joint8 reports individual position
-  // This matches the command interface where joint7 receives total opening commands
+  // The API position represents the total opening distance between the gripper fingers
+  // Convert this to individual joint positions:
+  // joint7 (left finger): moves from 0 (closed) to +half_opening (open)
+  // joint8 (right finger): moves from 0 (closed) to -half_opening (open)
 
   double half_opening = api_position * 0.5;
 
   if (hw_gripper_positions_.size() >= 2) {
-    hw_gripper_positions_[0] = api_position;   // joint7: total opening width
-    hw_gripper_positions_[1] = -half_opening;  // joint8: individual finger position
+    hw_gripper_positions_[0] = half_opening;   // joint7: left finger position (positive)
+    hw_gripper_positions_[1] = -half_opening;  // joint8: right finger position (negative)
   }
 }
 

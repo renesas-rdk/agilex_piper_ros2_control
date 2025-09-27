@@ -77,6 +77,15 @@ The hardware interface supports the following configuration options:
 - `include_gripper`: Set to "true" to include gripper interfaces
 - `prefix`: Namespace prefix for joint names (optional)
 
+## Gripper Control
+The gripper uses a JointGroupPositionController with two joints:
+- `joint7`: Left gripper finger (prismatic, range: 0 to 0.035m)
+- `joint8`: Right gripper finger (prismatic, range: -0.035 to 0m)
+
+To control the gripper width, set both joints with opposite signs:
+- For gripper width W: joint7 = W/2, joint8 = -W/2
+- Both joints should have the same absolute value for symmetric operation
+
 ### GPIO Controller Usage
 To use the GPIO controller features, load the GPIO controller configuration:
 ```bash

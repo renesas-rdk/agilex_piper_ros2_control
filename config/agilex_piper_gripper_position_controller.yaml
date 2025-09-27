@@ -1,0 +1,28 @@
+# Gripper Position Controller Configuration for Agilex Piper Gripper
+# This file configures the joint group position controller for the Agilex Piper gripper
+# Controls both gripper joints (joint7 and joint8) for precise gripper positioning
+
+agilex_piper_gripper_position_controller:
+  ros__parameters:
+    # Joint specification - both gripper joints
+    joints:
+      - joint7  # Left gripper finger (prismatic, range: 0 to 0.035m)
+      - joint8  # Right gripper finger (prismatic, range: -0.035 to 0m)
+
+    # Interface configuration
+    interface_name: position
+
+    # Command timeout (safety feature)
+    # If no command is received within this time, the controller will stop
+    # Set to 0.0 to disable timeout
+    command_timeout: 0.2  # seconds
+
+    # Publisher configuration
+    state_publish_rate: 100.0  # Hz
+
+    # Gripper specific notes:
+    # - joint7 moves from 0 (closed) to +0.035m (open)
+    # - joint8 moves from 0 (closed) to -0.035m (open)
+    # - To control gripper width: set both joints to same absolute value but opposite signs
+    # - Gripper width = |joint7_position| + |joint8_position|
+    # - For gripper width W: joint7 = W/2, joint8 = -W/2

@@ -31,8 +31,8 @@ controller_manager:
       type: cartesian_controller_handles/MotionControlHandle
 
     # Gripper controller
-    agilex_piper_gripper_action_controller:
-      type: position_controllers/GripperActionController
+    agilex_piper_gripper_position_controller:
+      type: position_controllers/JointGroupPositionController
 
     # GPIO controller for extended arm features
     agilex_piper_gpio_controller:
