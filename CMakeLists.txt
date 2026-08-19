@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.16)
 project(agilex_piper_ros2_control)
 
 set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
@@ -28,15 +28,15 @@ add_library(${PROJECT_NAME}_hardware_interface SHARED
 target_include_directories(${PROJECT_NAME}_hardware_interface
   PRIVATE
     include
-    ${agilex_piper_controller_INCLUDE_DIRS}
 )
 
-ament_target_dependencies(${PROJECT_NAME}_hardware_interface
-  hardware_interface
-  rclcpp
-  rclcpp_lifecycle
-  pluginlib
-  agilex_piper_controller
+target_link_libraries(${PROJECT_NAME}_hardware_interface
+  PUBLIC
+    hardware_interface::hardware_interface
+    rclcpp::rclcpp
+    rclcpp_lifecycle::rclcpp_lifecycle
+    pluginlib::pluginlib
+    agilex_piper_controller::agilex_piper_controller
 )
 
 # Install library
